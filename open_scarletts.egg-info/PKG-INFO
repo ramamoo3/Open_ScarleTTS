@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: open_scarletts
+Version: 0.1.0
+Summary: Lightweight Kokoro-ONNX wrapper with runtime emotion styling
+Author: ramamoo3
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Requires-Dist: kokoro-onnx>=0.3.0
+Requires-Dist: sounddevice>=0.4.6
+Requires-Dist: numpy>=1.22.0
+Requires-Dist: soundfile>=0.12.1
+Dynamic: author
+Dynamic: classifier
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

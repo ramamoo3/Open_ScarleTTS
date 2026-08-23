@@ -22,10 +22,11 @@ DEFAULT_CASES = {
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="scarletts-bench", description=__doc__)
-    parser.add_argument("--model", default="kokoro-v1.0.int8.onnx")
-    parser.add_argument("--voices", default="voices-v1.0.bin")
+    parser.add_argument("--model", default=None)
+    parser.add_argument("--voices", default=None)
     parser.add_argument("--voice", default="af_heart")
     parser.add_argument("--rounds", type=int, default=3)
+    parser.add_argument("--precision", choices=["fp16", "int8"], default="fp16")
     parser.add_argument("--no-stream", action="store_true", help="Benchmark non-streaming generate().")
     parser.add_argument("--cache-dir", default=None, help="Enable phrase cache in this directory.")
     parser.add_argument("--json", default=None, help="Write results as JSON to this file.")
@@ -34,6 +35,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     tts = EmotionTTS(
         model_path=args.model,
         voices_path=args.voices,
+        precision=getattr(args, "precision", None) or "fp16",
         default_voice=args.voice,
         enable_cache=bool(args.cache_dir),
         cache_dir=args.cache_dir or ".scarletts_bench_cache",

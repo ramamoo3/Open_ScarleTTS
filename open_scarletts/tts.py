@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Dict, Iterator, Optional, Tuple
 
 import numpy as np
@@ -25,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     Kokoro = None
 
-from .assets import ensure_assets
+from .assets import DEFAULT_PRECISION, ensure_assets
 from .cache import PhraseCache, make_key
 from .speaker import play_stream, tee_to_file
 from .textsplit import split_sentences
@@ -61,8 +62,8 @@ class EmotionTTS:
 
     def __init__(
         self,
-        model_path: str = "kokoro-v1.0.int8.onnx",
-        voices_path: str = "voices-v1.0.bin",
+        model_path: Optional[str] = None,
+        voices_path: Optional[str] = None,
         default_voice: str = "af_heart",
         lang: str = "en-us",
         emotion_profiles: Optional[Dict[str, Dict[str, float]]] = None,
@@ -70,6 +71,7 @@ class EmotionTTS:
         cache_dir: str = ".scarletts_cache",
         cache_max_mb: int = 100,
         auto_download: bool = False,
+        precision: str = DEFAULT_PRECISION,
     ) -> None:
         """Initialize the engine.
 
@@ -98,20 +100,30 @@ class EmotionTTS:
 
         if not default_voice or not default_voice.strip():
             raise ValueError("default_voice must be a non-empty string")
-        if not str(model_path).strip():
+        if model_path is not None and not str(model_path).strip():
             raise ValueError("model_path must be a non-empty string")
-        if not str(voices_path).strip():
+        if voices_path is not None and not str(voices_path).strip():
             raise ValueError("voices_path must be a non-empty string")
+        if precision not in ("fp16", "int8"):
+            raise ValueError(f"precision must be 'fp16' or 'int8', got {precision!r}")
+        model_path = model_path or f"kokoro-v1.0.{precision}.onnx"
+        voices_path = voices_path or "voices-v1.0.bin"
 
         self.model_path = model_path
         self.voices_path = voices_path
         self.default_voice = default_voice
+        self.precision = precision
         self.lang = lang
         self.kokoro = None
 
+        # default-family request keeps an alternate-precision fallback handy
+        if Path(model_path).name.startswith("kokoro-v1.0."):
+            self._fallback_model = "kokoro-v1.0.int8.onnx" if precision == "fp16" else "kokoro-v1.0.fp16.onnx"
+        else:
+            self._fallback_model = None
         try:
             resolved_model, resolved_voices = ensure_assets(
-                model_path, voices_path, auto_download=auto_download
+                model_path, voices_path, auto_download=auto_download, precision=precision
             )
             self.model_path, self.voices_path = resolved_model, resolved_voices
         except FileNotFoundError:
@@ -188,10 +200,21 @@ class EmotionTTS:
                 self.kokoro = Kokoro(self.model_path, self.voices_path)
                 logger.info("Loaded model from '%s'", self.model_path)
             except Exception as exc:  # noqa: BLE001 - third-party loader
-                logger.warning(
-                    "Failed to initialize Kokoro-ONNX (%s); running in mock mode.",
-                    exc,
-                )
+                alt = self._fallback_asset()
+                if alt is not None:
+                    logger.warning("Loading '%s' failed (%s); trying '%s'.", self.model_path, exc, alt)
+                    try:
+                        self.kokoro = Kokoro(str(alt), self.voices_path)
+                        self.model_path = str(alt)
+                        logger.info("Loaded fallback model '%s'", self.model_path)
+                        return
+                    except Exception as exc2:  # noqa: BLE001
+                        logger.warning("Fallback also failed (%s); running in mock mode.", exc2)
+                else:
+                    logger.warning(
+                        "Failed to initialize Kokoro-ONNX (%s); running in mock mode.",
+                        exc,
+                    )
         else:
             logger.warning(
                 "Model or voice files missing (model: '%s', voices: '%s'); "
@@ -438,6 +461,16 @@ class EmotionTTS:
                 meta={"text": text[:200], "emotion": emotion, "voice": resolved_voice},
             )
         return samples, sample_rate
+
+    def _fallback_asset(self):
+        """Locate an alternate-precision Kokoro file (cache dir first)."""
+        name = getattr(self, "_fallback_model", None)
+        if not name:
+            return None
+        for cand in (Path(self.model_path).parent / name, Path.home() / ".cache" / "open_scarletts" / name):
+            if cand.exists():
+                return cand
+        return None
 
     def _parse_emotion(self, text: str) -> Tuple[str, str]:
         """Extract a leading ``[tag]`` and return ``(emotion, clean_text)``.

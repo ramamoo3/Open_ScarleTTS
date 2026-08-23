@@ -19,8 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog='Example: scarletts "[happy] Good morning!" -o hello.wav',
     )
     parser.add_argument("text", nargs="*", help='Text to speak; may start with an emotion tag like "[happy]".')
-    parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"Path to the ONNX model (default: {DEFAULT_MODEL}).")
-    parser.add_argument("--voices", default=DEFAULT_VOICES, help=f"Path to the voices .bin file (default: {DEFAULT_VOICES}).")
+    parser.add_argument("-m", "--model", default=None, help=f"Path to the ONNX model (default: kokoro-v1.0.<precision>.onnx).")
+    parser.add_argument("--voices", default=None, help=f"Path to the voices .bin file (default: voices-v1.0.bin).")
     parser.add_argument("-v", "--voice", default="af_heart", help="Voice name (default: af_heart).")
     parser.add_argument("--lang", default="en-us", help="Language code (default: en-us).")
     parser.add_argument("-o", "--output", help="Write audio to this WAV/FLAC file instead of playing it.")
@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-max-mb", type=int, default=100, help="Phrase cache size cap in MB (default 100).")
     parser.add_argument("--setup", action="store_true", help="Download model assets to the shared cache and exit.")
     parser.add_argument("-y", "--auto-download", action="store_true", help="Download missing assets automatically on first use.")
+    parser.add_argument("--precision", choices=["fp16", "int8"], default=None, help="Kokoro model variant (default: fp16, falls back to int8).")
     parser.add_argument("-l", "--list-emotions", action="store_true", help="List available emotions and exit.")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     return parser
@@ -40,7 +41,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.setup:
         from .assets import ensure_assets
 
-        model, voices = ensure_assets(args.model, args.voices, auto_download=True)
+        model, voices = ensure_assets(args.model, args.voices, auto_download=True,
+                                      precision=args.precision or "fp16")
         print("Ready:")
         print(f"  model : {model}")
         print(f"  voices: {voices}")
@@ -56,6 +58,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cache_dir=args.cache_dir or ".scarletts_cache",
         cache_max_mb=args.cache_max_mb,
         auto_download=args.auto_download,
+        precision=args.precision or "fp16",
     )
 
     if args.list_emotions:

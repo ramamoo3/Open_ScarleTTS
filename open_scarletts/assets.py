@@ -17,11 +17,15 @@ logger = logging.getLogger("open_scarletts")
 
 ASSET_URLS = {
     "kokoro-v1.0.int8.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.int8.onnx",
+    "kokoro-v1.0.fp16.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.fp16.onnx",
     "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin",
 }
 
+DEFAULT_PRECISION = "fp16"
+
 MIN_SIZES = {  # sanity floors so we never "succeed" with an HTML error page
     "kokoro-v1.0.int8.onnx": 50_000_000,
+    "kokoro-v1.0.fp16.onnx": 100_000_000,
     "voices-v1.0.bin": 20_000_000,
 }
 
@@ -48,7 +52,7 @@ def have_assets(model_path: str | Path | None = None, voices_path: str | Path | 
     )
 
 
-def resolve_paths(model_path: str | None, voices_path: str | None) -> tuple[str, str]:
+def resolve_paths(model_path: str | None, voices_path: str | None, precision: str = DEFAULT_PRECISION) -> tuple[str, str]:
     """Prefer explicit paths; fall back to the shared cache directory.
 
     Cache fallback only applies to the canonical asset names (or empty
@@ -61,8 +65,9 @@ def resolve_paths(model_path: str | None, voices_path: str | None) -> tuple[str,
                 return str(p)
         return str(asset_path(default_name))
 
+    model_default = f"kokoro-v1.0.{precision}.onnx"
     return (
-        pick(model_path, "kokoro-v1.0.int8.onnx"),
+        pick(model_path, model_default),
         pick(voices_path, "voices-v1.0.bin"),
     )
 
@@ -143,13 +148,14 @@ def ensure_assets(
     voices_path: str | None = None,
     auto_download: bool = False,
     quiet: bool = False,
+    precision: str = DEFAULT_PRECISION,
 ) -> tuple[str, str]:
     """Resolve final asset paths, downloading into the cache if allowed.
 
     Returns ``(model_path, voices_path)`` that exist on disk.
     Raises ``FileNotFoundError`` when missing and ``auto_download`` is off.
     """
-    m_str, v_str = resolve_paths(model_path, voices_path)
+    m_str, v_str = resolve_paths(model_path, voices_path, precision)
     missing = [p for p in (m_str, v_str) if not Path(p).exists()]
     if not missing:
         return m_str, v_str
@@ -161,9 +167,10 @@ def ensure_assets(
             "run 'scarletts --setup' (or pass auto_download=True) to fetch them\n"
         )
 
-    for name, existing in (("kokoro-v1.0.int8.onnx", m_str), ("voices-v1.0.bin", v_str)):
+    model_asset = Path(m_str).name if Path(m_str).name.startswith("kokoro") else f"kokoro-v1.0.{precision}.onnx"
+    for name, existing in ((model_asset, m_str), ("voices-v1.0.bin", v_str)):
         if not Path(existing).exists():
             target = asset_path(name)
             logger.info("Downloading %s ...", name)
             download_asset(name, target, show_progress=not quiet)
-    return resolve_paths(model_path, voices_path)
+    return resolve_paths(model_path, voices_path, precision)

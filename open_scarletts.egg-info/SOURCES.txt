@@ -1,9 +1,0 @@
-README.md
-setup.py
-open_scarletts/__init__.py
-open_scarletts/tts.py
-open_scarletts.egg-info/PKG-INFO
-open_scarletts.egg-info/SOURCES.txt
-open_scarletts.egg-info/dependency_links.txt
-open_scarletts.egg-info/requires.txt
-open_scarletts.egg-info/top_level.txt

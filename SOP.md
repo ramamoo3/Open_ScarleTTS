@@ -6,25 +6,27 @@ This document outlines instructions for contributing to, modifying, and optimizi
 
 ## 1. Customizing and Adding Emotion Profiles
 
-All emotion profiles are defined in `open_scarletts/tts.py` under the `self.emotion_profiles` dictionary. 
+All emotion profiles live in `open_scarletts/tts.py` under `EmotionTTS.DEFAULT_PROFILES`. Each profile has two keys:
+* `"speed"`: Speaking rate multiplier fed to Kokoro natively (> 1.0 faster, < 1.0 slower).
+* `"pitch"`: Pitch shift multiplier applied after synthesis via resampling (> 1.0 higher, < 1.0 lower). *(Renamed from `pitch_mod` in v0.2.0; `pitch_mod` is still accepted as a legacy alias.)*
 
-### Modifying Speed
-You can adjust the speed of any profile by changing its `"speed"` value:
-* Speed > `1.0` makes speech faster (suitable for angry/excited tones).
-* Speed < `1.0` slows down speech (suitable for sad/ponderous tones).
+### Adding a New Emotion (Recommended)
+No source edits needed — register it at runtime:
+```python
+tts.register_emotion("excited", speed=1.2, pitch=1.08)
+```
+Valid ranges: `speed` in [0.5, 2.0], `pitch` in [0.5, 2.0].
 
-### Adding a New Emotion Profile
-To add a new emotion (e.g. `excited`):
-1. Open `open_scarletts/tts.py`.
-2. Add your new profile to the `self.emotion_profiles` dictionary:
-   ```python
-   "excited": {"speed": 1.2, "pitch_mod": 1.08}
-   ```
-3. Update `generate()` if your emotion requires custom NumPy DSP modifiers (e.g., volume gain):
-   ```python
-   if emotion == "excited":
-       samples = samples * 1.2  # Increase output volume gain slightly
-   ```
+### Adding a New Emotion (Permanent)
+To ship an emotion with the package, add it to `DEFAULT_PROFILES`:
+```python
+"excited": {"speed": 1.2, "pitch": 1.08}
+```
+Pitch shifting and output clipping are applied automatically for every emotion; only add extra NumPy DSP inside `_apply_dsp()` if your emotion needs bespoke treatment (e.g., custom gain):
+```python
+if emotion == "excited":
+    samples = samples * 1.1  # slight volume lift; final clip happens after this
+```
 
 ---
 
@@ -42,16 +44,15 @@ Whispers lack vocal cord vibration, leaving only turbulent airflow. We simulate 
    ```
 
 ### Pitch Modulation (Resampling)
-While Kokoro natively supports speed modification, pitch can be tweaked via interpolation:
+Implemented in `EmotionTTS._pitch_shift()`. Interpolating the waveform onto a *shorter* timeline raises the playback pitch (and compresses duration by `1/factor`); a longer timeline lowers it. To keep the overall speaking pace on target, `generate()` compensates by passing `speed / pitch` to Kokoro's native speed control before shifting.
 ```python
-# Modulate pitch up by interpolating (faster rate = higher pitch)
-duration = len(samples) / sample_rate
-new_samples = np.interp(
-    np.linspace(0, duration, int(len(samples) * pitch_mod)),
-    np.linspace(0, duration, len(samples)),
-    samples
-)
+# Raise pitch by 'factor' (> 1.0 = higher): resample to fewer points
+new_len = max(2, int(round(len(samples) / factor)))
+x_old = np.linspace(0.0, 1.0, len(samples))
+x_new = np.linspace(0.0, 1.0, new_len)
+shifted = np.interp(x_new, x_old, samples).astype(np.float32)
 ```
+Note: every DSP pass ends with `np.clip(samples, -1.0, 1.0)` so downstream DACs never receive out-of-range values.
 
 ---
 

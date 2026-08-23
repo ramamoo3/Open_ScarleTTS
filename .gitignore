@@ -1,0 +1,36 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Generated audio
+*.wav
+*.flac
+
+# Large model assets (download separately)
+*.onnx
+voices*.bin
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Local test/bench caches
+.scarletts_cache/
+.scarletts_test_cache/
+.scarletts_bench_cache/
+
+# Demo audio IS tracked
+!samples_demo/**
